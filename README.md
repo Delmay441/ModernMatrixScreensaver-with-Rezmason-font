@@ -58,6 +58,8 @@ the film, so they stay crisp at any resolution.
 **Configuring** — macOS: System Settings ▸ Screen Saver ▸ **Options…** (a live preview beside
 all the controls). Windows: **Settings…** in Screen Saver settings.
 
+![Modern Matrix](https://www.chewie.co.uk/wp-content/uploads/2026/06/image-768x439.png)
+
 ## Limitations (macOS)
 
 A platform quirk, not a bug — and confirmed by Apple's own engineers:
