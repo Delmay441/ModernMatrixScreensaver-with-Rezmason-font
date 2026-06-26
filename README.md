@@ -21,7 +21,8 @@ runtime-generated glyphs.
 
 1. Unzip it.
 2. Double-click **Modern Matrix.saver** → System Settings opens → click **Install**.
-3. *(Optional)* drag **Modern Matrix.app** into your Applications folder — the live settings editor.
+3. Select it in **Screen Saver** settings → **Options…** to configure — encodings, density/speed,
+   bloom, and more, with a live preview.
 
 Signed with a Developer ID and **notarized by Apple**, so it opens with no security warning.
 
@@ -54,8 +55,8 @@ All of the original GLMatrix controls, plus modern additions:
 Glyphs are generated at runtime (Core Text on macOS, DirectWrite on Windows), mirrored like
 the film, so they stay crisp at any resolution.
 
-**Configuring** — macOS: use **Modern Matrix.app** (a live preview beside the settings), or
-System Settings ▸ Screen Saver ▸ **Options…**. Windows: **Settings…** in Screen Saver settings.
+**Configuring** — macOS: System Settings ▸ Screen Saver ▸ **Options…** (a live preview beside
+all the controls). Windows: **Settings…** in Screen Saver settings.
 
 ## Limitations (macOS)
 

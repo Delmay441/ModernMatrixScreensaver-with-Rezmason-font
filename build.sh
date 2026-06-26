@@ -175,27 +175,21 @@ case "${1:-all}" in
             fi
             ;;
   dist)
-            # Release-build, Developer ID sign + hardened runtime, notarize, staple, and
-            # zip both bundles for distribution. Requires the Developer ID Application cert
-            # and a stored notarytool keychain profile ($NOTARY_PROFILE).
+            # Release-build the .saver, Developer ID sign + hardened runtime, notarize,
+            # staple, and zip it for distribution (saver-only — the companion app is a dev
+            # tool; end users configure in place via the Options sheet). Requires the
+            # Developer ID Application cert + a stored notarytool keychain profile.
             DEVID="${DEVELOPER_ID:-$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application[^"]*\)".*/\1/p' | head -1)}"
             [[ -n "$DEVID" ]] || { echo "ERROR: no 'Developer ID Application' certificate in the keychain." >&2; exit 1; }
             log "Distribution identity: $DEVID"
             SIGN_ID="$DEVID" CONFIG=release build_saver
-            SIGN_ID="$DEVID" CONFIG=release build_harness
             notarize_and_staple "$SAVER"
-            notarize_and_staple "$APP"
             log "Verifying signature + stapled ticket…"
-            for b in "$SAVER" "$APP"; do
-              codesign --verify --strict --verbose=2 "$b" 2>&1 | sed "s|^|  [$(basename "$b")] |" || true
-              xcrun stapler validate "$b" 2>&1 | sed "s|^|  [$(basename "$b")] |" || true
-            done
-            rm -rf "$BUILD/dist"; mkdir -p "$BUILD/dist/Modern Matrix"
-            ditto "$SAVER" "$BUILD/dist/Modern Matrix/$(basename "$SAVER")"
-            ditto "$APP"   "$BUILD/dist/Modern Matrix/$(basename "$APP")"
+            codesign --verify --strict --verbose=2 "$SAVER" 2>&1 | sed 's/^/  /' || true
+            xcrun stapler validate "$SAVER" 2>&1 | sed 's/^/  /' || true
             rm -f "$BUILD/ModernMatrix-macOS.zip"
-            ditto -c -k --keepParent "$BUILD/dist/Modern Matrix" "$BUILD/ModernMatrix-macOS.zip"
-            log "Distributable → $BUILD/ModernMatrix-macOS.zip"
+            ditto -c -k --keepParent "$SAVER" "$BUILD/ModernMatrix-macOS.zip"
+            log "Distributable → $BUILD/ModernMatrix-macOS.zip (Modern Matrix.saver)"
             ;;
   clean)    rm -rf "$BUILD"; log "Cleaned." ;;
   all|*)    build_harness; build_saver ;;
