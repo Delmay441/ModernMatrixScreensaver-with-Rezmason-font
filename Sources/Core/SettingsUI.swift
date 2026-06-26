@@ -37,6 +37,9 @@ struct ConfigureView: View {
         let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f
     }()
 
+    private static let blogURL = URL(string: "https://www.chewie.co.uk/coding/modern-matrix-screensaver/")!
+    private static let githubURL = URL(string: "https://github.com/DigitalChewie/ModernMatrixScreensaver")!
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 8) {
@@ -88,6 +91,14 @@ struct ConfigureView: View {
                     .disabled(!model.isDirty)
                     .keyboardShortcut("s", modifiers: .command)
             }
+
+            HStack(spacing: 10) {
+                Link("Blog post", destination: Self.blogURL)
+                Text("·").foregroundStyle(.tertiary)
+                Link("Source on GitHub", destination: Self.githubURL)
+                Spacer()
+            }
+            .font(.caption)
         }
         .padding(20)
         .frame(width: 380)
