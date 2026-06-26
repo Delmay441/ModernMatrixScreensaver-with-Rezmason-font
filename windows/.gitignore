@@ -1,0 +1,10 @@
+# Build intermediates and dev/runtime artifacts
+build/
+mm_dev.exe
+ModernMatrix.scr
+*.manifest
+*.obj
+*.exp
+*.lib
+*.ilk
+*.pdb

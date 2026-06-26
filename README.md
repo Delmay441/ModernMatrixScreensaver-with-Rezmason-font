@@ -18,7 +18,8 @@ screens" rendering, runaway memory, and general flakiness. This version is nativ
 
 Both are built from one shared core — a portable C engine (`core/mmcore.c`) wrapped in a
 Swift/Metal layer — by a single script, no `.xcodeproj`. That same C engine compiles into
-the planned Windows `.scr`, so the rain's behaviour is defined once for both platforms.
+the **Windows `.scr`** (see [`windows/`](windows/README.md)), so the rain's behaviour is
+defined once for both platforms.
 
 ## Features
 
@@ -68,15 +69,15 @@ BIN="build/Modern Matrix.app/Contents/MacOS/MatrixRainHarness"
 #        --wireframe --no-bloom --no-fog --no-textured --no-waves --panning --warmup N
 ```
 
-## Building the Windows version (.scr)
+## Windows version (.scr)
 
-Most of the Windows port is already written: the simulation, settings model, and glyph
-encodings live in **portable C at [`core/mmcore.c`](core/mmcore.c)**. To build the
-screensaver, read **[`PORTING.md`](PORTING.md)** — a complete, self-contained blueprint
-(start at §0) — plus [`core/README.md`](core/README.md). You **link `core/mmcore.c`** for the
-rain itself and implement only the Windows-specific parts: a Direct3D 11 renderer, a
-DirectWrite glyph atlas, a Win32 config dialog, and the `.scr` host shell (in a `windows/`
-folder). Requires Visual Studio 2022 with the "Desktop development with C++" workload.
+**The Windows port is built and at full parity** — see **[`windows/`](windows/README.md)**.
+It's a single self-contained `ModernMatrix.scr` (x64): a **Direct3D 11** renderer,
+**DirectWrite** glyph atlas, a native settings dialog with a **live preview**, and the
+`.scr` host shell — all **linking the same [`core/mmcore.c`](core/mmcore.c)** so the rain
+behaves identically to macOS. Built with `windows/build.ps1` (Visual Studio Build Tools
+2022, "Desktop development with C++"). The original blueprint is in
+[`PORTING.md`](PORTING.md); the as-built docs are in [`windows/README.md`](windows/README.md).
 
 ## Known limitations (macOS 26)
 
@@ -121,6 +122,7 @@ Sources/Core/      macOS Swift/Metal layer over the C engine
 Sources/Saver/     ScreenSaverView subclass + configure-sheet wrapper
 Sources/Harness/   companion app — live preview + settings, --snapshot mode
 Resources/Shaders.metal
+windows/           Windows .scr port — D3D11 renderer, DirectWrite atlas, config dialog (links mmcore)
 build.sh             compiles mmcore (clang) + Swift (swiftc) + Metal, assembles the bundles
 ```
 

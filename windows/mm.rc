@@ -1,0 +1,80 @@
+// mm.rc — config dialog, screensaver name, and version info. ASCII only (rc.exe
+// compiles with the system codepage; non-ASCII here turns into mojibake).
+#include <windows.h>
+#include <commctrl.h>
+#include "resource.h"
+
+// The classic screensaver-name convention: string id 1 is shown by the Windows
+// "Screen Saver Settings" control panel.
+STRINGTABLE
+BEGIN
+    1   "Modern Matrix"
+END
+
+IDD_CONFIG DIALOGEX 0, 0, 300, 360
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Modern Matrix - Settings"
+FONT 9, "Segoe UI", 400, 0, 1
+BEGIN
+    // Live preview surface (a child render window is created over this placeholder).
+    CONTROL         "", IDC_PREVIEW, "Static", SS_BLACKRECT | WS_VISIBLE, 10, 7, 280, 118
+
+    LTEXT           "Glyph density", IDC_STATIC, 10, 132, 120, 9
+    LTEXT           "Sparse", IDC_STATIC, 10, 145, 26, 9
+    CONTROL         "", IDC_DENSITY, "msctls_trackbar32", TBS_HORZ | WS_TABSTOP, 38, 142, 208, 18
+    RTEXT           "Dense", IDC_STATIC, 250, 145, 40, 9
+
+    LTEXT           "Glyph speed", IDC_STATIC, 10, 164, 120, 9
+    LTEXT           "Slow", IDC_STATIC, 10, 177, 26, 9
+    CONTROL         "", IDC_SPEED, "msctls_trackbar32", TBS_HORZ | WS_TABSTOP, 38, 174, 208, 18
+    RTEXT           "Fast", IDC_STATIC, 250, 177, 40, 9
+
+    LTEXT           "Matrix encoding", IDC_STATIC, 10, 196, 120, 9
+    COMBOBOX        IDC_ENCODING, 10, 207, 150, 90, CBS_DROPDOWNLIST | WS_TABSTOP | WS_VSCROLL
+
+    AUTOCHECKBOX    "Fog",             IDC_FOG,       10, 228, 130, 10
+    AUTOCHECKBOX    "Waves",           IDC_WAVES,    155, 228, 130, 10
+    AUTOCHECKBOX    "Panning",         IDC_PANNING,   10, 242, 130, 10
+    AUTOCHECKBOX    "Textured",        IDC_TEXTURED, 155, 242, 130, 10
+    AUTOCHECKBOX    "Wireframe",       IDC_WIREFRAME, 10, 256, 130, 10
+    AUTOCHECKBOX    "Show frame rate", IDC_SHOWFPS,  155, 256, 130, 10
+    AUTOCHECKBOX    "Bloom glow",      IDC_BLOOM,     10, 270, 130, 10
+    AUTOCHECKBOX    "HDR highlights",  IDC_HDR,      155, 270, 130, 10
+
+    LTEXT           "Glow intensity", IDC_STATIC, 10, 288, 120, 9
+    LTEXT           "Subtle", IDC_STATIC, 10, 301, 26, 9
+    CONTROL         "", IDC_GLOW, "msctls_trackbar32", TBS_HORZ | WS_TABSTOP, 38, 298, 208, 18
+    RTEXT           "Intense", IDC_STATIC, 250, 301, 40, 9
+
+    CONTROL         "<a href=""https://github.com/Pottypotsworth/ModernMatrixScreensaver"">Project on GitHub</a>",
+                    IDC_LINK, "SysLink", WS_TABSTOP, 10, 322, 160, 10
+
+    PUSHBUTTON      "Reset to Defaults", IDC_RESET, 10, 338, 90, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 196, 338, 44, 14
+    DEFPUSHBUTTON   "Save", IDOK, 246, 338, 44, 14
+END
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 1,0,0,0
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "Chewie"
+            VALUE "FileDescription",  "Modern Matrix"
+            VALUE "FileVersion",      "1.0.0.0"
+            VALUE "InternalName",     "ModernMatrix"
+            VALUE "OriginalFilename", "ModernMatrix.scr"
+            VALUE "ProductName",      "Modern Matrix"
+            VALUE "ProductVersion",   "1.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 0x04B0
+    END
+END
