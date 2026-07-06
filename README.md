@@ -1,22 +1,21 @@
-## CREDIT
+## Original Screensaver: [ModernMatrixScreensaver by DigitalChewie] (https://github.com/DigitalChewie/ModernMatrixScreensaver)
 
-Original Screensaver: [ModernMatrixScreensaver by DigitalChewie] (https://github.com/DigitalChewie/ModernMatrixScreensaver)
-Font: [Matrix-Code by Rezmason] (https://github.com/Rezmason/matrix)
+## Font: [Matrix-Code by Rezmason] (https://github.com/Rezmason/matrix)
 
 ## Changes
 
-* **Custom Font Support:** Modified to load the Rezmason font pack. (https://github.com/Rezmason/matrix/raw/master/assets/Matrix-Code.ttf)
-* **Removed v-sync** *
+* **Custom Font Support:** Modified to load the Rezmason font pack. Install required. (https://github.com/Rezmason/matrix/raw/master/assets/Matrix-Code.ttf)
+* **Removed v-sync** 
 
-# WINDOWS ONLY
+## WINDOWS ONLY
 
-Sorry Apple users. 
-
----
+*Sorry Apple users.*
 
 ## Original Project Attribution
 
 *The following is the original documentation for the base project. I have forked this project to add the features listed above.*
+
+---
 
 # Modern Matrix
 
