@@ -5,15 +5,18 @@ Font: [Matrix-Code by Rezmason] (https://github.com/Rezmason/matrix)
 
 ## Changes
 
-updated screensaver to use Rezmason's custom font. Please download and install. (https://github.com/Rezmason/matrix/raw/master/assets/Matrix-Code.ttf)
-Removed v-sync (windows natively implements)
-changes affect WINDOWS ONLY. Sorry Apple users. 
+* **Custom Font Support:** Modified to load the Rezmason font pack. (https://github.com/Rezmason/matrix/raw/master/assets/Matrix-Code.ttf)
+* **Removed v-sync** *
+
+# WINDOWS ONLY
+
+Sorry Apple users. 
+
+---
 
 ## Original Project Attribution
 
-The following is the original documentation for the base project. I have forked this project to add the features listed above.
-
----
+*The following is the original documentation for the base project. I have forked this project to add the features listed above.*
 
 # Modern Matrix
 
