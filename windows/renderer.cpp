@@ -474,7 +474,7 @@ bool Renderer::RenderFrame(float dt)
     DrawOverlay();
     if (headless_) { ctx_->Flush(); return true; }
 
-    HRESULT hr = swap_->Present(1, 0);
+    HRESULT hr = swap_->Present(0, 0);
     if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
         MMLogHR("Present: device lost", hr);
         ready_ = false;     // host will see false and quit so Windows can relaunch

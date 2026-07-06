@@ -22,14 +22,31 @@
 using Microsoft::WRL::ComPtr;
 
 // Fonts with good half-width katakana coverage, best first.
-static const wchar_t* kFonts[] = { L"MS Gothic", L"Yu Gothic", L"Meiryo", L"Segoe UI" };
+static const wchar_t* kFonts[] = { L"Matrix-Code" };
 
 bool GlyphAtlas::Build(ID3D11Device* device, ID3D11DeviceContext* ctx,
                        int encoding, int cellPx, int cols)
 {
-    uint32_t cps[MM_MAX_CODEPOINTS];
-    int count = mm_encoding_codepoints(encoding, cps, MM_MAX_CODEPOINTS);
-    if (count < 1) { count = 1; cps[0] = L'?'; }
+	uint32_t cps[MM_MAX_CODEPOINTS];
+    int count = 0;
+
+    // Define your hyper-specific list of character codes here.
+    // Replace these numbers with the exact codes you see in your Character Map.
+	uint32_t mySymbols[] = {
+        0x0022, 0x002A, 0x002B, 0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0037, 0x0038, 0x0039, 0x003A, 0x003C, 0x003E, 0x007A, 0x007C, 0x00A6, 0x00A9,
+        0x254C, 0x25AA, 0x30A2, 0x30A6, 0x30A8, 0x30AA, 0x30AB, 0x30AD, 0x30B1, 0x30B3, 0x30B5, 0x30B7, 0x30B9, 0x30BB, 0x30BD, 0x30BF, 0x30C4, 0x30C6, 0x30CA, 
+		0x30CB,	0x30CC, 0x30CD, 0x30CF, 0x30D2, 0x30DB, 0x30DE, 0x30DF, 0x30E0, 0x30E1, 0x30E2, 0x30E4, 0x30E8, 0x30E9, 0x30EA, 0x30EF, 0x30FC, 0xA78A, 0xE937
+    };
+
+    // Calculate how many symbols are in your list
+    int numSymbols = sizeof(mySymbols) / sizeof(mySymbols[0]);
+
+    // Loop through your list and add them to the screensaver
+    for (int i = 0; i < numSymbols; ++i) {
+        if (count < MM_MAX_CODEPOINTS) {
+            cps[count++] = mySymbols[i];
+        }
+    }
     int rows = (count + cols - 1) / cols;
     const UINT W = (UINT)(cols * cellPx);
     const UINT H = (UINT)(rows * cellPx);
