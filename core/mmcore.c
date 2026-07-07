@@ -72,7 +72,7 @@ MMWorld mm_world(void) {
     w.halfWidth = 38.0f;
     w.topY      = 28.0f;
     w.bottomY   = -28.0f;
-    w.spacing   = 1.55f;
+    w.spacing   = 1.0f;
     w.depthNear = 10.0f;
     w.depthFar  = -42.0f;
     w.slotCount = (int)((w.topY - w.bottomY) / w.spacing) + 2;   /* == 38 */
