@@ -5,6 +5,11 @@
   ModernMatrix.scr (a Win32 PE renamed .scr). Shaders are compiled at runtime,
   so there is nothing else to ship.
 
+  Prerequisite: windows\audio.cpp needs windows\miniaudio.h (single header,
+  https://github.com/mackron/miniaudio, not vendored in this repo -- drop it
+  in windows\ before building). It's picked up automatically by the
+  Get-ChildItem *.cpp glob below along with everything else in windows\.
+
   Usage:
     windows\build.ps1            # build windows\ModernMatrix.scr
     windows\build.ps1 -Test      # build + run the mmcore link test (no .scr)
@@ -116,6 +121,12 @@ function Invoke-Dev([string[]]$cliArgs, [bool]$wait) {
     Get-Process mm_dev -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep -Milliseconds 400
     Copy-Item $scr $exe -Force
+    # log.cpp now writes to %LOCALAPPDATA%\ModernMatrix\ModernMatrix.log and
+    # persists across runs (it rotates itself once it grows past ~1MB), so
+    # there's nothing to clear here anymore. This just mops up stray log
+    # files left behind by older builds that wrote next to the exe or into
+    # %TEMP% -- harmless no-ops once none of those exist.
+    Remove-Item (Join-Path $win 'ModernMatrix.log') -ErrorAction SilentlyContinue
     Remove-Item "$env:TEMP\ModernMatrix.log" -ErrorAction SilentlyContinue
     Start-Process -FilePath $exe -ArgumentList $cliArgs -Wait:$wait -PassThru -NoNewWindow
 }
@@ -126,7 +137,19 @@ if ($Shot) {
     Write-Host "Rendering $Frames-frame headless shot ..." -ForegroundColor Cyan
     $p = Invoke-Dev @('/shot', $png, "$Frames") $true
     Write-Host ("shot exit={0}  ->  {1}  (exists={2})" -f $p.ExitCode, $png, (Test-Path $png))
-    if (Test-Path "$env:TEMP\ModernMatrix.log") { Write-Host "--- log ---"; Get-Content "$env:TEMP\ModernMatrix.log" }
+    $devLog = Join-Path $env:LOCALAPPDATA 'ModernMatrix\ModernMatrix.log'
+    if (Test-Path $devLog) {
+        # The log now persists across runs, so tail from the most recent
+        # "=== session start ===" marker instead of dumping every run ever
+        # recorded into it.
+        Write-Host "--- log (this run) ---"
+        $lines = Get-Content $devLog
+        $markerIdx = @(0..($lines.Count - 1)) | Where-Object { $lines[$_] -match '=== session start' } | Select-Object -Last 1
+        if ($null -ne $markerIdx) { $lines[$markerIdx..($lines.Count - 1)] }
+        else { $lines }
+    } else {
+        Write-Host "--- log: not found at $devLog ---"
+    }
 }
 elseif ($Run)       { Write-Host "Launching /s ..." -ForegroundColor DarkGray; Invoke-Dev @('/s') $false | Out-Null }
 elseif ($Configure) { Write-Host "Launching /c ..." -ForegroundColor DarkGray; Invoke-Dev @('/c') $false | Out-Null }

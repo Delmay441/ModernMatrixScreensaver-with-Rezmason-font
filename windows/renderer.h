@@ -1,10 +1,4 @@
 // renderer.h — Direct3D 11 renderer for the Modern Matrix rain.
-//
-// Drives the shared simulation (core/mmcore.h) and draws it the same way the macOS
-// Metal renderer does: instanced camera-facing billboards, premultiplied-over blend
-// on a black clear, rendered to an HDR (R16F) scene target and composited (with
-// optional bloom) to the swapchain. Camera / fog / bloom constants mirror
-// Sources/Core/Renderer.swift.
 #pragma once
 
 #define WIN32_LEAN_AND_MEAN
@@ -15,11 +9,10 @@
 #include <dwrite.h>
 #include <wrl/client.h>
 #include <cstdint>
-#include "../core/mmcore.h"
+#include "mmcore.h"
 #include "atlas.h"
+#include <DirectXMath.h>
 
-// Mirrors the `Uniforms` cbuffer in shaders.hlsl (and ShaderTypes.swift): scalar
-// floats so the 144-byte layout is identical on both sides (no padding surprises).
 struct Uniforms {
     float viewProj[16];                                   // row-major
     float camX, camY, camZ;
@@ -29,20 +22,29 @@ struct Uniforms {
     float fogEnabled, fogStartDist, fogEndDist;
     float textured, wireframe, pad0, pad1;
 };
-static_assert(sizeof(Uniforms) == 144, "Uniforms must stay a tight 144 bytes");
+static_assert(sizeof(Uniforms) == 144, "Uniforms size mismatch");
 
 class Renderer {
 public:
     template <class T> using ComPtr = Microsoft::WRL::ComPtr<T>;
 
     bool Init(HWND hwnd, const MMSettings& settings);
-    bool InitHeadless(UINT width, UINT height, const MMSettings& settings); // offscreen capture
+    bool InitHeadless(UINT width, UINT height, const MMSettings& settings);
     void Shutdown();
     void Resize(UINT width, UINT height);
-    void Apply(const MMSettings& settings);   // live settings change
-    bool RenderFrame(float dt);               // advance sim + draw; false if device lost
-    bool SaveScreenshot(const wchar_t* path); // headless: copy final target -> PNG
+    void Apply(const MMSettings& settings);
+    bool RenderFrame(float dt);
+    bool SaveScreenshot(const wchar_t* path);
     double Fps() const { return fps_; }
+
+    // Drains this renderer's MMSim bottom-hit queue (see mmcore.h) so callers
+    // (host.cpp) can forward the events to MMAudio::NotifyBottomEvents once
+    // per fixed sim tick. Safe to call even if sim_ is null or empty.
+    int PopBottomEvents(MMBottomEvent* out, int cap) {
+        return sim_ ? mm_sim_pop_bottom_events(sim_, out, cap) : 0;
+    }
+
+    HANDLE FrameWaitableHandle() const { return frameWaitable_; }
 
 private:
     bool InitCore();
@@ -52,11 +54,12 @@ private:
     bool CreateSceneTargets(UINT width, UINT height);
     bool CreateShaders();
     bool CreateBuffersAndStates();
-    bool CreateOverlay();   // Direct2D/DirectWrite for the FPS text
+    bool EnsureInstanceBufferCapacity(int requiredInstances);
+    bool CreateOverlay();
     void UpdateUniforms();
     void DrawScene();
-    void DrawPost();    // bloom (optional) + composite to backbuffer
-    void DrawOverlay(); // FPS text (when showFPS)
+    void DrawPost();
+    void DrawOverlay();
 
     HWND hwnd_ = nullptr;
     UINT width_ = 1, height_ = 1;
@@ -65,56 +68,68 @@ private:
     ComPtr<ID3D11DeviceContext> ctx_;
     ComPtr<IDXGISwapChain1>     swap_;
     ComPtr<ID3D11RenderTargetView> backRTV_;
-    DXGI_FORMAT swapFormat_ = DXGI_FORMAT_B8G8R8A8_UNORM;  // FP16 scRGB when HDR display
+    DXGI_FORMAT swapFormat_ = DXGI_FORMAT_B8G8R8A8_UNORM;
+    HANDLE frameWaitable_ = nullptr;
 
-    // Headless capture (no swapchain): composite into finalTex_, copy to staging, encode PNG.
     bool headless_ = false;
     ComPtr<ID3D11Texture2D> finalTex_;
     ComPtr<ID3D11Texture2D> stagingTex_;
 
-    // HDR scene target + half-res bloom ping-pong (all R16G16B16A16_FLOAT).
     ComPtr<ID3D11Texture2D> sceneTex_;
     ComPtr<ID3D11RenderTargetView> sceneRTV_;
     ComPtr<ID3D11ShaderResourceView> sceneSRV_;
-    ComPtr<ID3D11Texture2D> bloomTex_[2];
-    ComPtr<ID3D11RenderTargetView> bloomRTV_[2];
-    ComPtr<ID3D11ShaderResourceView> bloomSRV_[2];
-    UINT bloomW_ = 1, bloomH_ = 1;
+    
+    // Dual-filtering bloom mipchain
+    static const int kBloomMips = 5;
+    ComPtr<ID3D11Texture2D> bloomMipTex_[kBloomMips];
+    ComPtr<ID3D11RenderTargetView> bloomMipRTV_[kBloomMips];
+    ComPtr<ID3D11ShaderResourceView> bloomMipSRV_[kBloomMips];
+    UINT bloomMipW_[kBloomMips];
+    UINT bloomMipH_[kBloomMips];
 
-    // Pipeline.
     ComPtr<ID3D11VertexShader> glyphVS_;
     ComPtr<ID3D11PixelShader>  glyphPS_;
     ComPtr<ID3D11VertexShader> fsVS_;
     ComPtr<ID3D11PixelShader>  thresholdPS_;
-    ComPtr<ID3D11PixelShader>  blurPS_;
+    ComPtr<ID3D11PixelShader>  downsamplePS_;
+    ComPtr<ID3D11PixelShader>  upsamplePS_;
     ComPtr<ID3D11PixelShader>  compositePS_;
 
-    ComPtr<ID3D11Buffer> instanceBuf_;     // structured, dynamic
+    ComPtr<ID3D11Buffer> instanceBuf_;
     ComPtr<ID3D11ShaderResourceView> instanceSRV_;
-    ComPtr<ID3D11Buffer> uniformCB_;       // b0 for glyph pass
-    ComPtr<ID3D11Buffer> postCB_;          // b0 for post passes (float4)
+    ComPtr<ID3D11Buffer> uniformCB_;
+    ComPtr<ID3D11Buffer> postCB_;
 
-    ComPtr<ID3D11BlendState> blendPremul_; // ONE / INV_SRC_ALPHA
+    ComPtr<ID3D11BlendState> blendPremul_;
     ComPtr<ID3D11BlendState> blendOpaque_;
+    ComPtr<ID3D11BlendState> blendAdditive_; 
     ComPtr<ID3D11SamplerState> sampLinear_;
     ComPtr<ID3D11RasterizerState> raster_;
 
-    // Direct2D / DirectWrite overlay (FPS text).
     ComPtr<ID2D1Factory1>       d2dFactory_;
     ComPtr<ID2D1Device>         d2dDevice_;
     ComPtr<ID2D1DeviceContext>  d2dCtx_;
     ComPtr<IDWriteFactory>      dwrite_;
     ComPtr<IDWriteTextFormat>   textFormat_;
     ComPtr<ID2D1SolidColorBrush> textBrush_;
+    ComPtr<ID2D1Bitmap1>        d2dTargets_[2]; 
 
     GlyphAtlas atlas_;
     MMSim* sim_ = nullptr;
     MMSettings settings_{};
 
-    static const int kMaxInstances = 65536;
+    int bufferCapacity_ = 0; 
     int instanceCount_ = 0;
     float time_ = 0.f, panTime_ = 0.f;
+    float forwardTravel_ = 0.f;
+    float simAccumulator_ = 0.f; 
     double fps_ = 0.0;
+
+    bool viewProjCached_ = false;
+    DirectX::XMMATRIX cachedViewProj_;
+    DirectX::XMFLOAT3 cachedCamPos_;
+    DirectX::XMFLOAT3 cachedCamRight_;
+    DirectX::XMFLOAT3 cachedCamUp_;
 
     bool ready_ = false;
 };

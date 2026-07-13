@@ -8,7 +8,7 @@
 int main()
 {
     MMSettings s = mm_settings_default();
-    MMWorld    w = mm_world();
+    MMWorld    w = mm_world(&s);
 
     printf("settings: density=%.2f speed=%.2f bloom=%.2f enc=%d\n",
            s.density, s.speed, s.bloomIntensity, s.encoding);
