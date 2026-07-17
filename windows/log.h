@@ -1,4 +1,4 @@
-// log.h — tiny logging to %LOCALAPPDATA%\ModernMatrix\ModernMatrix.log
+// log.h — tiny logging to %LOCALAPPDATA%\MatrixReflow\MatrixReflow.log
 // (append-across-runs, size-rotated; + debugger output). A screensaver has
 // no console, so this is how we see what went wrong.
 #pragma once

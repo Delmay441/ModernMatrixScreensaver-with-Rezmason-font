@@ -109,7 +109,7 @@ static void EnableDpiAwareness()
     SetProcessDPIAware();
 }
 
-static const wchar_t* kClass = L"ModernMatrixWindow";
+static const wchar_t* kClass = L"MatrixReflowWindow";
 
 static void EnsureClass(HINSTANCE inst)
 {
@@ -156,7 +156,7 @@ static bool CreateRunWindows(HINSTANCE inst, const MMSettings& s)
         mons.push_back(r);
     }
     for (const RECT& r : mons) {
-        HWND hwnd = CreateWindowExW(WS_EX_TOPMOST, kClass, L"Modern Matrix", WS_POPUP,
+        HWND hwnd = CreateWindowExW(WS_EX_TOPMOST, kClass, L"Matrix Reflow", WS_POPUP,
                                     r.left, r.top, r.right - r.left, r.bottom - r.top,
                                     nullptr, nullptr, inst, nullptr);
         if (!hwnd) continue;
@@ -174,11 +174,11 @@ static bool CreateSingleWindow(HINSTANCE inst, Mode mode, HWND parent, const MMS
     HWND hwnd = nullptr;
     if (mode == Mode::Preview && parent) {
         RECT rc{}; GetClientRect(parent, &rc);
-        hwnd = CreateWindowExW(0, kClass, L"Modern Matrix", WS_CHILD | WS_VISIBLE,
+        hwnd = CreateWindowExW(0, kClass, L"Matrix Reflow", WS_CHILD | WS_VISIBLE,
                                0, 0, rc.right - rc.left, rc.bottom - rc.top,
                                parent, nullptr, inst, nullptr);
     } else {
-        hwnd = CreateWindowExW(0, kClass, L"Modern Matrix (dev)",
+        hwnd = CreateWindowExW(0, kClass, L"Matrix Reflow (dev)",
                                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
                                CW_USEDEFAULT, CW_USEDEFAULT, 1280, 800,
                                nullptr, nullptr, inst, nullptr);
@@ -192,7 +192,19 @@ static int RunLoop()
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
 
+    std::vector<HANDLE> waitables;
+    for (Renderer* r : g_app.renderers) {
+        if (HANDLE h = r->FrameWaitableHandle())
+            waitables.push_back(h);
+    }
+
     for (;;) {
+        DWORD timeout = waitables.empty() ? 16 : 1000;
+        
+        // Wait for ANY handle to signal or a message to arrive
+        DWORD wr = MsgWaitForMultipleObjectsEx((DWORD)waitables.size(), waitables.data(), 
+                                               timeout, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+
         MSG msg;
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) return (int)msg.wParam;
@@ -200,48 +212,47 @@ static int RunLoop()
             DispatchMessage(&msg);
         }
 
-        for (size_t i = 0; i < g_app.renderers.size(); ++i) {
-            Renderer* r = g_app.renderers[i];
-            HANDLE h = r->FrameWaitableHandle();
-
-            // Block until this swap chain has room for another queued frame --
-            // Microsoft's documented pattern for a waitable swap chain. This is
-            // NOT the same as waiting for the monitor's vblank: the object
-            // signals as soon as the GPU has consumed enough of the previously
-            // queued frame to accept another, which in steady state happens
-            // well before the display's next refresh, so this doesn't
-            // re-serialize several monitors against each other the way
-            // blocking inside Present() alone would.
-            //
-            // Fails OPEN on a timeout: if it doesn't signal within a second,
-            // render anyway rather than sit stalled with nothing on screen. An
-            // earlier version of this polled with a zero timeout and skipped
-            // the frame entirely whenever it wasn't signaled yet -- which on
-            // full-screen, multi-monitor topmost windows apparently never
-            // became "ready" by that check, and produced a permanent black
-            // screen with no error anywhere. A single generously-timed wait,
-            // unconditionally followed by a render regardless of the outcome,
-            // can't get stuck that way.
-            if (h) {
-                DWORD wr = WaitForSingleObject(h, 1000);
-                if (wr != WAIT_OBJECT_0)
-                    MMLog("renderer %zu: frame-latency wait result %lu, rendering anyway", i, (unsigned long)wr);
-            } else {
-                // No waitable object for this renderer (IDXGISwapChain2
-                // unavailable) -- fall back to a plain ~60Hz message-pump sleep
-                // so this renderer's loop iteration still doesn't busy-spin.
-                MsgWaitForMultipleObjectsEx(0, nullptr, 16, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-            }
-
-            LARGE_INTEGER now; QueryPerformanceCounter(&now);
-            float dt = (float)(now.QuadPart - g_app.lastTick[i].QuadPart) / (float)freq.QuadPart;
-            g_app.lastTick[i] = now;
-            if (dt > 0.1f) dt = 0.1f;                  // clamp per PORTING.md §8
-
-            if (!r->RenderFrame(dt)) {
-                RequestQuit();                          // device lost -> exit, Windows relaunches
-            }              
+        if (wr >= WAIT_OBJECT_0 && wr < WAIT_OBJECT_0 + waitables.size()) {
+            // A specific swapchain is ready
+            size_t idx = wr - WAIT_OBJECT_0;
+            HANDLE signaled = waitables[idx];
             
+            for (size_t i = 0; i < g_app.renderers.size(); ++i) {
+                Renderer* r = g_app.renderers[i];
+                if (r->FrameWaitableHandle() == signaled) {
+                    LARGE_INTEGER now; QueryPerformanceCounter(&now);
+                    float dt = (float)(now.QuadPart - g_app.lastTick[i].QuadPart) / (float)freq.QuadPart;
+                    g_app.lastTick[i] = now;
+                    if (dt > 0.1f) dt = 0.1f;
+                    if (!r->RenderFrame(dt)) RequestQuit();
+                    break;
+                }
+            }
+        } 
+        else if (wr == WAIT_TIMEOUT || waitables.empty()) {
+            // Timeout (or no waitables): render everything to prevent a stall
+            for (size_t i = 0; i < g_app.renderers.size(); ++i) {
+                Renderer* r = g_app.renderers[i];
+                LARGE_INTEGER now; QueryPerformanceCounter(&now);
+                float dt = (float)(now.QuadPart - g_app.lastTick[i].QuadPart) / (float)freq.QuadPart;
+                g_app.lastTick[i] = now;
+                if (dt > 0.1f) dt = 0.1f;
+                if (!r->RenderFrame(dt)) RequestQuit();
+            }
+        }
+
+        // Renderers without waitables are updated outside the semaphore check
+        if (!waitables.empty() && wr != WAIT_TIMEOUT) {
+            for (size_t i = 0; i < g_app.renderers.size(); ++i) {
+                Renderer* r = g_app.renderers[i];
+                if (!r->FrameWaitableHandle()) {
+                    LARGE_INTEGER now; QueryPerformanceCounter(&now);
+                    float dt = (float)(now.QuadPart - g_app.lastTick[i].QuadPart) / (float)freq.QuadPart;
+                    g_app.lastTick[i] = now;
+                    if (dt > 0.1f) dt = 0.1f;
+                    if (!r->RenderFrame(dt)) RequestQuit();
+                }
+            }
         }
     }
 }
@@ -295,40 +306,13 @@ static void ParseArgs(Mode& mode, HWND& parent)
     LocalFree(argv);
 }
 
-// Font embedding now happens entirely in atlas.cpp, which builds its own
-// in-memory DirectWrite font collection straight from font_data.h -- reliable
-// regardless of whether the OS-wide font tables notice anything, and it cleans
-// up after itself. This used to also load the font via a Win32 RT_RCDATA
-// resource (IDR_MATRIX_FONT) here, but that was the same fundamentally fragile
-// AddFontMemResourceEx mechanism, it depended on a .rc entry that couldn't be
-// verified, and it never unregistered the font it added -- so it's been
-// removed rather than kept as a second, redundant path to the same font data.
-
 // --------------------------------------------------------- realtime pacing ----
-// Only used around RunLoop() (Run/Windowed/Preview) -- Mode::Shot is an offline
-// batch render with no vsync target, and Mode::Config's live preview runs its
-// own much-lower-stakes WM_TIMER tick, so neither needs this.
 static HANDLE g_mmcssHandle = nullptr;
 
 static void BeginRealtimePacing()
 {
-    // Raises the system's timer tick resolution from the default ~15.6ms to 1ms.
-    // The actual frame pacing comes from each monitor's DXGI frame-latency
-    // waitable object, not from this -- but RunLoop's WaitForSingleObject
-    // timeout and the no-waitable-object MsgWaitForMultipleObjectsEx fallback
-    // (and anything else in-process that waits with a timeout) get much
-    // finer-grained wakeups as a result. Cheap, standard, and free insurance.
     timeBeginPeriod(1);
 
-    // Ask the Multimedia Class Scheduler Service to schedule this thread the way
-    // a game's render thread is scheduled, so routine background OS activity
-    // (Windows Update, search indexing, etc.) is far less likely to preempt us
-    // mid-frame and cause an occasional late Present. This is the sanctioned
-    // alternative to manually raising the whole process to
-    // REALTIME_PRIORITY_CLASS, which Microsoft explicitly warns against: a
-    // runaway realtime process can starve input and audio processing badly
-    // enough to make the whole system feel locked up. MMCSS gives a bounded,
-    // well-behaved priority boost instead.
     DWORD taskIndex = 0;
     g_mmcssHandle = AvSetMmThreadCharacteristicsW(L"Games", &taskIndex);
     if (!g_mmcssHandle)
@@ -349,7 +333,6 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
     ParseArgs(mode, parent);
     g_app.mode = mode;
     
-    // Fix 1: Assign the correctly named parameter 'inst' to our global
     g_hInstance = inst;
     
     MMSettings settings = LoadSettings();

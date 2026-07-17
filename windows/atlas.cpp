@@ -15,18 +15,14 @@ using Microsoft::WRL::ComPtr;
 static const wchar_t* kFonts[] = { L"Matrix-Code" };
 
 bool GlyphAtlas::Build(ID3D11Device* device, ID3D11DeviceContext* ctx,
-                       int encoding, int cellPx, int cols)
+                       int cellPx, int cols)
 {
-    uint32_t cps[MM_MAX_CODEPOINTS];
-    int count = 0;
-    uint32_t mySymbols[] = {
+    static const uint32_t cps[] = {
         0x0022, 0x002A, 0x002B, 0x0030, 0x0031, 0x0032, 0x0033, 0x0034, 0x0035, 0x0037, 0x0038, 0x0039, 0x003A, 0x003C, 0x003E, 0x007A, 0x007C, 0x00A6, 0x00A9,
         0x254C, 0x25AA, 0x30A2, 0x30A6, 0x30A8, 0x30AA, 0x30AB, 0x30AD, 0x30B1, 0x30B3, 0x30B5, 0x30B7, 0x30B9, 0x30BB, 0x30BD, 0x30BF, 0x30C4, 0x30C6, 0x30CA, 
         0x30CB, 0x30CC, 0x30CD, 0x30CF, 0x30D2, 0x30DB, 0x30DE, 0x30DF, 0x30E0, 0x30E1, 0x30E2, 0x30E4, 0x30E8, 0x30E9, 0x30EA, 0x30EF, 0x30FC, 0xA78A, 0xE937
     };
-
-    int numSymbols = sizeof(mySymbols) / sizeof(mySymbols[0]);
-    for (int i = 0; i < numSymbols && count < MM_MAX_CODEPOINTS; ++i) cps[count++] = mySymbols[i];
+    const int count = sizeof(cps) / sizeof(cps[0]);
 
     int rows = (count + cols - 1) / cols;
     const UINT W = (UINT)(cols * cellPx);
@@ -117,12 +113,9 @@ bool GlyphAtlas::Build(ID3D11Device* device, ID3D11DeviceContext* ctx,
     for (int i = 0; i < count; ++i) {
         int col = i % cols, row = i / cols;
         float x0 = (float)(col * cellPx), y0 = (float)(row * cellPx);
-        float cx = x0 + cellPx * 0.5f;
-        rt->SetTransform(D2D1::Matrix3x2F(-1, 0, 0, 1, 2 * cx, 0));
         wchar_t ch = (wchar_t)cps[i];
         rt->DrawText(&ch, 1, fmt.Get(), D2D1::RectF(x0, y0, x0 + cellPx, y0 + cellPx), white.Get());
     }
-    rt->SetTransform(D2D1::Matrix3x2F::Identity());
     rt->EndDraw();
 
     // The font file/face/collection each hold their own reference into the
@@ -163,6 +156,6 @@ bool GlyphAtlas::Build(ID3D11Device* device, ID3D11DeviceContext* ctx,
     ctx->GenerateMips(srv.Get());
 
     tex_ = tex; srv_ = srv;
-    cols_ = cols; rows_ = rows; glyphCount_ = count; encoding_ = encoding;
+    cols_ = cols; rows_ = rows; glyphCount_ = count;
     return true;
 }

@@ -1,17 +1,14 @@
 <#
-  build.ps1 — build driver for the Windows Modern Matrix screensaver.
+  build.ps1 — build driver for the Windows Matrix Reflow screensaver
+  (built on the Modern Matrix / mmcore engine).
 
   Compiles windows\*.cpp + core\mmcore.c with MSVC and links a single
-  ModernMatrix.scr (a Win32 PE renamed .scr). Shaders are compiled at runtime,
-  so there is nothing else to ship.
-
-  Prerequisite: windows\audio.cpp needs windows\miniaudio.h (single header,
-  https://github.com/mackron/miniaudio, not vendored in this repo -- drop it
-  in windows\ before building). It's picked up automatically by the
-  Get-ChildItem *.cpp glob below along with everything else in windows\.
+  MatrixReflow.scr (a Win32 PE renamed .scr). Shaders are pre-compiled 
+  using fxc.exe into C-arrays, so there is nothing else to ship and 
+  no runtime compilation overhead.
 
   Usage:
-    windows\build.ps1            # build windows\ModernMatrix.scr
+    windows\build.ps1            # build windows\MatrixReflow.scr
     windows\build.ps1 -Test      # build + run the mmcore link test (no .scr)
     windows\build.ps1 -Run       # build, then launch the saver full-screen (/s)
     windows\build.ps1 -Configure # build, then open the config dialog (/c)
@@ -29,15 +26,12 @@ param(
     [switch]$Clean
 )
 
-# Note: native tools (cl, vcvars) emit harmless lines to stderr; under 'Stop' PS 5.1
-# would treat those as terminating errors. We use 'Continue' + explicit exit-code
-# checks (throw on real failures) instead.
 $ErrorActionPreference = 'Continue'
 $win   = $PSScriptRoot
 $root  = Split-Path -Parent $win
 $core  = Join-Path $root 'core'
 $build = Join-Path $win 'build'
-$scr   = Join-Path $win 'ModernMatrix.scr'
+$scr   = Join-Path $win 'MatrixReflow.scr'
 
 if ($Clean) {
     if (Test-Path $build) { Remove-Item -Recurse -Force $build }
@@ -81,12 +75,47 @@ if ($Test) {
     return
 }
 
-# --- Full .scr build ----------------------------------------------------------
+# --- Offline Shader Compilation (fxc.exe) -------------------------------------
+function Convert-BinaryToCHeader([string]$BinPath, [string]$HeaderPath, [string]$ArrayName) {
+    if (-not (Test-Path $BinPath)) { throw "Binary not found: $BinPath" }
+    $bytes = [System.IO.File]::ReadAllBytes($BinPath)
+    $sb = [System.Text.StringBuilder]::new()
+    [void]$sb.AppendLine("static const unsigned char ${ArrayName}[] = {")
+    for ($i = 0; $i -lt $bytes.Count; $i++) {
+        if ($i % 12 -eq 0) { [void]$sb.Append("    ") }
+        [void]$sb.Append(("0x{0:X2}" -f $bytes[$i]))
+        if ($i -lt $bytes.Count - 1) { [void]$sb.Append(", ") }
+        if ($i % 12 -eq 11 -or $i -eq $bytes.Count - 1) { [void]$sb.AppendLine() }
+    }
+    [void]$sb.AppendLine("};")
+    Add-Content -Path $HeaderPath -Value $sb.ToString()
+}
 
-# Embed shaders.hlsl as a C string so the .scr is self-contained (no runtime file).
-$hlsl = Get-Content (Join-Path $win 'shaders.hlsl') -Raw
-$embed = 'static const char kShaderHLSL[] = R"MMHLSL(' + "`r`n" + $hlsl + "`r`n" + ')MMHLSL";' + "`r`n"
-Set-Content -Path (Join-Path $build 'shaders_embed.h') -Value $embed -Encoding ascii
+Write-Host "Compiling shaders with fxc.exe ..." -ForegroundColor DarkGray
+$hlsl = Join-Path $win 'shaders.hlsl'
+$blobHeader = Join-Path $build 'shaders_blob.h'
+if (Test-Path $blobHeader) { Remove-Item $blobHeader }
+
+# Define all shader entry points and targets
+$shaders = @(
+    @{ Entry='glyph_vertex'; Target='vs_5_0'; Name='kBlob_glyph_vertex' },
+    @{ Entry='glyph_fragment'; Target='ps_5_0'; Name='kBlob_glyph_fragment' },
+    @{ Entry='fullscreen_vertex'; Target='vs_5_0'; Name='kBlob_fullscreen_vertex' },
+    @{ Entry='bloom_threshold'; Target='ps_5_0'; Name='kBlob_bloom_threshold' },
+    @{ Entry='bloom_downsample'; Target='ps_5_0'; Name='kBlob_bloom_downsample' },
+    @{ Entry='bloom_upsample'; Target='ps_5_0'; Name='kBlob_bloom_upsample' },
+    @{ Entry='bloom_composite'; Target='ps_5_0'; Name='kBlob_bloom_composite' },
+    @{ Entry='crt_filter'; Target='ps_5_0'; Name='kBlob_crt_filter' }
+)
+
+foreach ($s in $shaders) {
+    $cso = Join-Path $build ($s.Entry + '.cso')
+    & fxc /nologo /O3 /T $s.Target /E $s.Entry /Fo $cso $hlsl
+    if ($LASTEXITCODE -ne 0) { throw "fxc compilation failed for $($s.Entry)." }
+    Convert-BinaryToCHeader $cso $blobHeader $s.Name
+}
+
+# --- Full .scr build ----------------------------------------------------------
 
 $cppFiles = Get-ChildItem (Join-Path $win '*.cpp') |
             Where-Object { $_.Name -ne '_linktest.cpp' } |
@@ -103,10 +132,11 @@ if (Test-Path $rc) {
     if ($LASTEXITCODE -ne 0) { throw "rc failed ($LASTEXITCODE)." }
 }
 
-$libs = @('d3d11.lib','dxgi.lib','d3dcompiler.lib','dwrite.lib','d2d1.lib','windowscodecs.lib',
+# Removed d3dcompiler.lib as it's no longer needed for runtime
+$libs = @('d3d11.lib','dxgi.lib','dwrite.lib','d2d1.lib','windowscodecs.lib',
           'user32.lib','gdi32.lib','comdlg32.lib','comctl32.lib','advapi32.lib','ole32.lib','shell32.lib')
 
-Write-Host "Compiling + linking ModernMatrix.scr ..." -ForegroundColor Cyan
+Write-Host "Compiling + linking MatrixReflow.scr ..." -ForegroundColor Cyan
 $sources = @($cppFiles) + @(Join-Path $core 'mmcore.c')
 $linkArgs = @('/link','/SUBSYSTEM:WINDOWS','/MANIFEST:EMBED', "/OUT:$scr") + $libs
 if ($resObj) { $sources += $resObj }
@@ -114,20 +144,13 @@ if ($resObj) { $sources += $resObj }
 if ($LASTEXITCODE -ne 0) { throw "Build failed ($LASTEXITCODE)." }
 Write-Host "`nBuilt $scr" -ForegroundColor Green
 
-# Dev launches run a copy named .exe (PowerShell won't direct-exec a .scr, and a
-# live .scr can hold a file lock). The copy sits next to shaders.hlsl.
 function Invoke-Dev([string[]]$cliArgs, [bool]$wait) {
     $exe = Join-Path $win 'mm_dev.exe'
     Get-Process mm_dev -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep -Milliseconds 400
     Copy-Item $scr $exe -Force
-    # log.cpp now writes to %LOCALAPPDATA%\ModernMatrix\ModernMatrix.log and
-    # persists across runs (it rotates itself once it grows past ~1MB), so
-    # there's nothing to clear here anymore. This just mops up stray log
-    # files left behind by older builds that wrote next to the exe or into
-    # %TEMP% -- harmless no-ops once none of those exist.
-    Remove-Item (Join-Path $win 'ModernMatrix.log') -ErrorAction SilentlyContinue
-    Remove-Item "$env:TEMP\ModernMatrix.log" -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $win 'MatrixReflow.log') -ErrorAction SilentlyContinue
+    Remove-Item "$env:TEMP\MatrixReflow.log" -ErrorAction SilentlyContinue
     Start-Process -FilePath $exe -ArgumentList $cliArgs -Wait:$wait -PassThru -NoNewWindow
 }
 
@@ -137,11 +160,8 @@ if ($Shot) {
     Write-Host "Rendering $Frames-frame headless shot ..." -ForegroundColor Cyan
     $p = Invoke-Dev @('/shot', $png, "$Frames") $true
     Write-Host ("shot exit={0}  ->  {1}  (exists={2})" -f $p.ExitCode, $png, (Test-Path $png))
-    $devLog = Join-Path $env:LOCALAPPDATA 'ModernMatrix\ModernMatrix.log'
+    $devLog = Join-Path $env:LOCALAPPDATA 'MatrixReflow\MatrixReflow.log'
     if (Test-Path $devLog) {
-        # The log now persists across runs, so tail from the most recent
-        # "=== session start ===" marker instead of dumping every run ever
-        # recorded into it.
         Write-Host "--- log (this run) ---"
         $lines = Get-Content $devLog
         $markerIdx = @(0..($lines.Count - 1)) | Where-Object { $lines[$_] -match '=== session start' } | Select-Object -Last 1

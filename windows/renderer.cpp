@@ -1,6 +1,5 @@
 #include "renderer.h"
 #include "log.h"
-#include <d3dcompiler.h>
 #include <DirectXMath.h>
 #include <dxgi1_6.h>
 #include <wincodec.h>
@@ -8,7 +7,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cmath>
-#include "shaders_embed.h"
+#include "shaders_blob.h"
 #include <vector>
 #include <algorithm>
 
@@ -17,18 +16,16 @@ using namespace DirectX;
 
 static UINT maxu(UINT a, UINT b) { return a > b ? a : b; }
 
-static bool CompileShader(const char* entry, const char* target, ComPtr<ID3DBlob>& out)
+static UINT ComputePresentInterval(bool batterySaver)
 {
-    ComPtr<ID3DBlob> err;
-    UINT flags = D3DCOMPILE_OPTIMIZATION_LEVEL3 | D3DCOMPILE_ENABLE_STRICTNESS;
-    HRESULT hr = D3DCompile(kShaderHLSL, sizeof(kShaderHLSL) - 1, "shaders.hlsl",
-                            nullptr, nullptr, entry, target, flags, 0, &out, &err);
-    if (FAILED(hr)) {
-        MMLog("shader '%s' compile failed hr=0x%08lX: %s", entry, (unsigned long)hr,
-              err ? (const char*)err->GetBufferPointer() : "(no message)");
-        return false;
-    }
-    return true;
+    if (!batterySaver) return 1;
+    DEVMODEW dm{};
+    dm.dmSize = sizeof(dm);
+    UINT hz = 60;
+    if (EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency > 1)
+        hz = dm.dmDisplayFrequency;
+    UINT interval = (hz + 59) / 60;   // round up so effective fps stays at or below 60
+    return interval < 1 ? 1 : interval;
 }
 
 static bool OutputIsHDR(IDXGIFactory2* factory, HWND hwnd)
@@ -78,14 +75,17 @@ bool Renderer::InitCore()
     if (!CreateBuffersAndStates())       return false;
     if (!CreateOverlay()) MMLog("overlay (FPS) unavailable — continuing without it");
 
-    if (!atlas_.Build(device_.Get(), ctx_.Get(), settings_.encoding))
+    if (!atlas_.Build(device_.Get(), ctx_.Get()))
         MMLog("atlas build failed — falling back to untextured quads");
     MMSettings ms = settings_;
-    sim_ = mm_sim_create(&ms, atlas_.GlyphCount(), 0);
+
+    uint64_t seed = headless_ ? 0 : GetTickCount64();
+    float aspect = (float)width_ / (float)maxu(1, height_);
+    sim_ = mm_sim_create(&ms, atlas_.GlyphCount(), seed, aspect);
     if (!sim_) { MMLog("mm_sim_create failed"); return false; }
 
     EnsureInstanceBufferCapacity(mm_sim_max_instances(sim_));
-
+	presentInterval_ = ComputePresentInterval(settings_.batterySaver != 0);
     ready_ = true;
     return true;
 }
@@ -143,9 +143,6 @@ bool Renderer::CreateDeviceAndSwapChain(HWND hwnd)
 
     ComPtr<IDXGISwapChain2> swap2;
     if (SUCCEEDED(swap_.As(&swap2))) {
-        // Present(1,0) below means we're always waiting for vblank anyway, so a
-        // deep queue buys nothing but extra input-to-photon latency; 1 keeps the
-        // GPU from ever getting more than a single frame ahead of what's asked.
         swap2->SetMaximumFrameLatency(1);
         frameWaitable_ = swap2->GetFrameLatencyWaitableObject();
     }
@@ -210,6 +207,7 @@ bool Renderer::CreateSceneTargets(UINT width, UINT height)
     };
     
     if (!mk(width, height, sceneTex_, sceneRTV_, sceneSRV_)) return false;
+    if (!mk(width, height, crtInputTex_, crtInputRTV_, crtInputSRV_)) return false;
     
     UINT bw = maxu(1, width / 2);
     UINT bh = maxu(1, height / 2);
@@ -225,21 +223,14 @@ bool Renderer::CreateSceneTargets(UINT width, UINT height)
 
 bool Renderer::CreateShaders()
 {
-    ComPtr<ID3DBlob> b;
-    if (!CompileShader("glyph_vertex", "vs_5_0", b)) return false;
-    MM_CHECK(device_->CreateVertexShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &glyphVS_));
-    if (!CompileShader("glyph_fragment", "ps_5_0", b)) return false;
-    MM_CHECK(device_->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &glyphPS_));
-    if (!CompileShader("fullscreen_vertex", "vs_5_0", b)) return false;
-    MM_CHECK(device_->CreateVertexShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &fsVS_));
-    if (!CompileShader("bloom_threshold", "ps_5_0", b)) return false;
-    MM_CHECK(device_->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &thresholdPS_));
-    if (!CompileShader("bloom_downsample", "ps_5_0", b)) return false;
-    MM_CHECK(device_->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &downsamplePS_));
-    if (!CompileShader("bloom_upsample", "ps_5_0", b)) return false;
-    MM_CHECK(device_->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &upsamplePS_));
-    if (!CompileShader("bloom_composite", "ps_5_0", b)) return false;
-    MM_CHECK(device_->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &compositePS_));
+    MM_CHECK(device_->CreateVertexShader(kBlob_glyph_vertex, sizeof(kBlob_glyph_vertex), nullptr, &glyphVS_));
+    MM_CHECK(device_->CreatePixelShader(kBlob_glyph_fragment, sizeof(kBlob_glyph_fragment), nullptr, &glyphPS_));
+    MM_CHECK(device_->CreateVertexShader(kBlob_fullscreen_vertex, sizeof(kBlob_fullscreen_vertex), nullptr, &fsVS_));
+    MM_CHECK(device_->CreatePixelShader(kBlob_bloom_threshold, sizeof(kBlob_bloom_threshold), nullptr, &thresholdPS_));
+    MM_CHECK(device_->CreatePixelShader(kBlob_bloom_downsample, sizeof(kBlob_bloom_downsample), nullptr, &downsamplePS_));
+    MM_CHECK(device_->CreatePixelShader(kBlob_bloom_upsample, sizeof(kBlob_bloom_upsample), nullptr, &upsamplePS_));
+    MM_CHECK(device_->CreatePixelShader(kBlob_bloom_composite, sizeof(kBlob_bloom_composite), nullptr, &compositePS_));
+    MM_CHECK(device_->CreatePixelShader(kBlob_crt_filter, sizeof(kBlob_crt_filter), nullptr, &crtFilterPS_));
     return true;
 }
 
@@ -326,13 +317,13 @@ bool Renderer::CreateBuffersAndStates()
 void Renderer::Apply(const MMSettings& settings)
 {
     if (!ready_) { settings_ = settings; return; }
-    if (settings.encoding != atlas_.Encoding())
-        atlas_.Build(device_.Get(), ctx_.Get(), settings.encoding);
     settings_ = settings;
+    presentInterval_ = ComputePresentInterval(settings_.batterySaver != 0);
     if (settings_.depthAmount <= 0.0) forwardTravel_ = 0.0f;
     mm_sim_set_camera_travel(sim_, forwardTravel_);
     MMSettings ms = settings_;
-    mm_sim_update(sim_, &ms, atlas_.GlyphCount());
+    float aspect = (float)width_ / (float)maxu(1, height_);
+    mm_sim_update(sim_, &ms, atlas_.GlyphCount(), aspect);
     viewProjCached_ = false; 
 }
 
@@ -357,6 +348,15 @@ void Renderer::Resize(UINT width, UINT height)
         ready_ = false;
         return;
     }
+
+    // Re-derive the lane grid for the new aspect ratio -- otherwise moving
+    // the window to an ultra-wide monitor (or resizing the dev/preview
+    // window) keeps the lane count picked at the old size.
+    if (sim_) {
+        MMSettings ms = settings_;
+        float aspect = (float)width_ / (float)maxu(1, height_);
+        mm_sim_update(sim_, &ms, atlas_.GlyphCount(), aspect);
+    }
     ready_ = true;
 }
 
@@ -379,8 +379,6 @@ void Renderer::UpdateUniforms()
             eyeP = XMFLOAT3(L(pe[i].x, pe[j].x), L(pe[i].y, pe[j].y), L(pe[i].z, pe[j].z));
             ctrP = XMFLOAT3(L(pc[i].x, pc[j].x), L(pc[i].y, pc[j].y), L(pc[i].z, pc[j].z));
         }
-        // A depth-enabled scene moves along the stable forward (-Z) axis.
-        // The target moves by the same amount, so this never alters framing.
         eyeP.z -= forwardTravel_;
         ctrP.z -= forwardTravel_;
         XMVECTOR eye = XMVectorSet(eyeP.x, eyeP.y, eyeP.z, 1);
@@ -424,6 +422,7 @@ void Renderer::UpdateUniforms()
     
     u.textured  = (atlas_.HasTexture() && settings_.textured) ? 1.0f : 0.0f;
     u.wireframe = settings_.wireframe ? 1.0f : 0.0f;
+    u.extraContrastHeads = settings_.extraContrastHeads ? 1.0f : 0.0f;
 
     D3D11_MAPPED_SUBRESOURCE ms;
     if (SUCCEEDED(ctx_->Map(uniformCB_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
@@ -437,23 +436,13 @@ void Renderer::DrawScene()
     int max_instances = mm_sim_max_instances(sim_);
     EnsureInstanceBufferCapacity(max_instances);
 
-    // 1. Generate instances into a persistent CPU buffer first
-    static std::vector<MMGlyphInstance> sortBuf;
-    if (sortBuf.size() < (size_t)max_instances) sortBuf.resize(max_instances);
+    if (sortBuf_.size() < (size_t)max_instances) sortBuf_.resize(max_instances);
 
-    instanceCount_ = mm_sim_write_instances(sim_, sortBuf.data(), max_instances, simAccumulator_);
+    instanceCount_ = mm_sim_write_instances(sim_, sortBuf_.data(), max_instances, simAccumulator_);
 
-    // 2. Sort back-to-front (Painter's Algorithm) to handle alpha blending overlaps correctly.
-    // Smaller Z values (more negative) are deeper in your projection setup.
-    std::stable_sort(sortBuf.begin(), sortBuf.begin() + instanceCount_,
-        [](const MMGlyphInstance& a, const MMGlyphInstance& b) {
-            return a.pz < b.pz; 
-        });
-
-    // 3. Map and copy the sorted array to the GPU in one fast operation
     D3D11_MAPPED_SUBRESOURCE ms;
     if (SUCCEEDED(ctx_->Map(instanceBuf_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &ms))) {
-        memcpy(ms.pData, sortBuf.data(), sizeof(MMGlyphInstance) * instanceCount_);
+        memcpy(ms.pData, sortBuf_.data(), sizeof(MMGlyphInstance) * instanceCount_);
         ctx_->Unmap(instanceBuf_.Get(), 0);
     }
     UpdateUniforms();
@@ -486,18 +475,10 @@ void Renderer::DrawScene()
 
 void Renderer::DrawPost()
 {
-    // Startup build-in: ease bloom and CRT curvature in from zero over the
-    // first ~1.8s of time_ (already tracked, never reset) instead of the
-    // screen snapping to full effect on frame 1 -- reads like a CRT warming
-    // up. smoothstep gives a soft ease-in/out rather than a linear ramp.
     const float kBuildInDuration = 1.8f;
     float buildInT = (time_ < kBuildInDuration) ? (time_ / kBuildInDuration) : 1.0f;
     float buildInEase = buildInT * buildInT * (3.0f - 2.0f * buildInT);
 
-    // CRT-glass barrel distortion + per-channel chromatic aberration, folded
-    // into the existing composite pass -- no extra render targets or passes.
-    // Driven by the IDC_DISTORTION slider (settings_.crtDistort, 0..1), then
-    // scaled by buildInEase so curvature/aberration also ramp in at startup.
     const float distortAmt    = (float)settings_.crtDistort * 0.25f * buildInEase;
     const float aberrationAmt = distortAmt * 0.05f;
     const float bloomAmt      = (float)settings_.bloomIntensity * buildInEase;
@@ -531,18 +512,21 @@ void Renderer::DrawPost()
     ctx_->IASetInputLayout(nullptr);
     ctx_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
+    // When CRT emulation is on, bloom_composite writes to the intermediate
+    // crtInput target instead of the backbuffer directly, so crt_filter can
+    // read it back afterward (see crtInputRTV_ comment in renderer.h).
+    const bool crtOn = settings_.crtEmulation != 0;
+    ID3D11RenderTargetView* compositeTarget = crtOn ? crtInputRTV_.Get() : backRTV_.Get();
+
     if (settings_.bloom) {
-        // 1. Threshold pass: Full-res scene -> Mip 0
         setPost(0.72f, 0, 1.0f / (float)width_, 1.0f / (float)height_);
         drawFS(bloomMipRTV_[0].Get(), bloomMipW_[0], bloomMipH_[0], thresholdPS_.Get(), sceneSRV_.Get(), nullptr);
 
-        // 2. Downsample chain: Mip 0 -> Mip 1 -> Mip 2 ...
         for (int i = 1; i < kBloomMips; ++i) {
             setPost(0, 0, 1.0f / bloomMipW_[i-1], 1.0f / bloomMipH_[i-1]);
             drawFS(bloomMipRTV_[i].Get(), bloomMipW_[i], bloomMipH_[i], downsamplePS_.Get(), bloomMipSRV_[i-1].Get(), nullptr);
         }
 
-        // 3. Upsample chain: Accumulate back up the chain additively
         ctx_->OMSetBlendState(blendAdditive_.Get(), nullptr, 0xffffffff);
         for (int i = kBloomMips - 2; i >= 0; --i) {
             setPost(0, 0, 1.0f / bloomMipW_[i+1], 1.0f / bloomMipH_[i+1]);
@@ -550,12 +534,18 @@ void Renderer::DrawPost()
         }
         ctx_->OMSetBlendState(blendOpaque_.Get(), nullptr, 0xffffffff);
 
-        // 4. Composite Mip 0 over the backbuffer (+ CRT distortion/aberration)
         setPost(bloomAmt, distortAmt, 0, aberrationAmt);
-        drawFS(backRTV_.Get(), width_, height_, compositePS_.Get(), sceneSRV_.Get(), bloomMipSRV_[0].Get());
+        drawFS(compositeTarget, width_, height_, compositePS_.Get(), sceneSRV_.Get(), bloomMipSRV_[0].Get());
     } else {
         setPost(0, distortAmt, 0, aberrationAmt);
-        drawFS(backRTV_.Get(), width_, height_, compositePS_.Get(), sceneSRV_.Get(), sceneSRV_.Get());
+        drawFS(compositeTarget, width_, height_, compositePS_.Get(), sceneSRV_.Get(), sceneSRV_.Get());
+    }
+
+    if (crtOn) {
+        // texel size in xy, time in z (see crt_filter's post.xyz convention
+        // in shaders.hlsl); w unused.
+        setPost(1.0f / (float)width_, 1.0f / (float)height_, time_, 0);
+        drawFS(backRTV_.Get(), width_, height_, crtFilterPS_.Get(), crtInputSRV_.Get(), nullptr);
     }
 
     ID3D11ShaderResourceView* nulls[2] = { nullptr, nullptr };
@@ -565,13 +555,20 @@ void Renderer::DrawPost()
 bool Renderer::RenderFrame(float dt)
 {
     if (!ready_) return false;
+
+    if (swap_ && isOccluded_) {
+        HRESULT hr = swap_->Present(presentInterval_, 0);
+        if (hr == DXGI_STATUS_OCCLUDED) {
+            Sleep(10); 
+            return true;
+        }
+        isOccluded_ = false;
+    }
+
     time_ += dt;
     panTime_ += dt;
 
     if (settings_.depthAmount > 0.0) {
-        // cameraSpeed is an independent 0..1 dial; 0.5 reproduces the old
-        // hardcoded 1.0 units/sec dolly speed exactly, so existing settings
-        // (and the new default) are unaffected.
         const float kForwardSpeed = (float)(settings_.cameraSpeed * 2.0);
         static const float kRecycleDistance = 72.0f;
         forwardTravel_ += kForwardSpeed * dt;
@@ -586,8 +583,17 @@ bool Renderer::RenderFrame(float dt)
         mm_sim_set_camera_travel(sim_, 0.0f);
     }
 
+    // Fed unconditionally -- mmcore.c only uses this to detect 11:11 AM/PM
+    // for the rain easter egg (gated on the easterEggs setting over there),
+    // so there's no separate toggle to check here.
+    {
+        SYSTEMTIME lt; GetLocalTime(&lt);
+        mm_sim_set_clock(sim_, lt.wHour, lt.wMinute, lt.wSecond);
+    }
+
     simAccumulator_ += dt;
     const float kTargetTimeStep = 1.0f / 60.0f;
+    if (simAccumulator_ > 0.1f) simAccumulator_ = 0.1f;
     while (simAccumulator_ >= kTargetTimeStep) {
         mm_sim_advance(sim_, kTargetTimeStep);
         simAccumulator_ -= kTargetTimeStep;       
@@ -600,12 +606,13 @@ bool Renderer::RenderFrame(float dt)
     DrawOverlay();
     if (headless_) { ctx_->Flush(); return true; }
 
-    // SyncInterval = 1: present on the next vblank rather than blasting frames
-    // through as fast as the GPU can produce them. Combined with a
-    // frame-latency-waitable swap chain capped at 1 queued frame, this is what
-    // actually locks the saver to the display refresh with consistent frame
-    // timing -- SyncInterval 0 (uncapped) was why this ran 1000+ FPS before.
     HRESULT hr = swap_->Present(1, 0);
+    
+    if (hr == DXGI_STATUS_OCCLUDED) {
+        isOccluded_ = true;
+        return true;
+    }
+    
     if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
         ready_ = false;
         return false;
@@ -712,4 +719,4 @@ bool Renderer::SaveScreenshot(const wchar_t* path)
     enc->Commit();
     free(bgra);
     return true;
-};
+}

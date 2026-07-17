@@ -11,7 +11,7 @@ IDR_MATRIX_FONT RCDATA "Matrix-Code.ttf"
 // "Screen Saver Settings" control panel.
 STRINGTABLE
 BEGIN
-    1   "Modern Matrix"
+    1   "Matrix Reflow"
 END
 
 // Page 1 of the config dialog's tab control: every slider in the app, grouped
@@ -23,50 +23,52 @@ IDD_PAGE_SLIDERS DIALOGEX 0, 0, 272, 220
 STYLE DS_SETFONT | DS_CONTROL | WS_CHILD
 FONT 9, "Segoe UI", 400, 0, 1
 BEGIN
-    LTEXT           "Glyph speed", IDC_STATIC, 4, 4, 120, 9
-    LTEXT           "Slow", IDC_STATIC, 4, 17, 26, 9
+    LTEXT           "Falling speed", IDC_STATIC, 120, 4, 120, 9
+    LTEXT           "Slow", IDC_STATIC, 8, 14, 26, 9
     CONTROL         "", IDC_SPEED, "msctls_trackbar32", TBS_HORZ | WS_TABSTOP, 32, 14, 208, 18
-    RTEXT           "Fast", IDC_STATIC, 244, 17, 24, 9
+    RTEXT           "Fast", IDC_STATIC, 240, 14, 24, 9
 
     LTEXT           "Density:", IDC_STATIC, 4, 34, 38, 8
-    CONTROL         "", IDC_DENSITY, "msctls_trackbar32", TBS_BOTH | TBS_NOTICKS | WS_TABSTOP, 44, 32, 95, 15
+    CONTROL         "", IDC_DENSITY, "msctls_trackbar32", TBS_BOTH | TBS_NOTICKS | WS_TABSTOP, 32, 32, 95, 15
     
-    LTEXT           "Glyph Size:", IDC_STATIC, 149, 34, 42, 8
-    CONTROL         "", IDC_GLYPH_SCALE, "msctls_trackbar32", TBS_BOTH | TBS_NOTICKS | WS_TABSTOP, 193, 32, 75, 15
+    LTEXT           "Size:", IDC_STATIC, 130, 34, 42, 8
+    CONTROL         "", IDC_GLYPH_SCALE, "msctls_trackbar32", TBS_BOTH | TBS_NOTICKS | WS_TABSTOP, 145, 32, 95, 15
     LTEXT           "Small sizes impact CPU!", IDC_WARNING_GLYPH, 149, 49, 119, 8, NOT WS_VISIBLE
 
-    LTEXT           "Column Length", IDC_STATIC, 4, 60, 120, 9
+    LTEXT           "Column length", IDC_STATIC, 120, 60, 120, 9
+	LTEXT           "Short", IDC_STATIC, 8, 70, 26, 9
     CONTROL         "", IDC_LENGTH_BIAS, "msctls_trackbar32", TBS_HORZ | WS_TABSTOP, 32, 70, 208, 18
+	RTEXT           "Long", IDC_STATIC, 240, 70, 28, 9
 
-    LTEXT           "Screen curvature", IDC_STATIC, 4, 88, 120, 9
-    LTEXT           "Flat", IDC_STATIC, 4, 101, 26, 9
+    LTEXT           "Screen curvature", IDC_STATIC, 120, 88, 120, 9
+    LTEXT           "Flat", IDC_STATIC, 8, 98, 26, 9
     CONTROL         "", IDC_DISTORTION, "msctls_trackbar32", TBS_HORZ | WS_TABSTOP, 32, 98, 208, 18
-    RTEXT           "Curved", IDC_STATIC, 244, 101, 28, 9
+    RTEXT           "Curved", IDC_STATIC, 240, 98, 28, 9
 
-    LTEXT           "Scene depth", IDC_STATIC, 4, 116, 120, 9
-    LTEXT           "Flat", IDC_STATIC, 4, 129, 26, 9
+    LTEXT           "Scene depth", IDC_STATIC, 120, 116, 120, 9
+    LTEXT           "2D", IDC_STATIC, 8, 126, 26, 9
     CONTROL         "", IDC_DEPTH, "msctls_trackbar32", TBS_HORZ | WS_TABSTOP, 32, 126, 208, 18
-    RTEXT           "Deep", IDC_STATIC, 244, 129, 28, 9
+    RTEXT           "3D", IDC_STATIC, 240, 126, 28, 9
 
-    LTEXT           "Glow intensity", IDC_STATIC, 4, 144, 120, 9
-    LTEXT           "Subtle", IDC_STATIC, 4, 157, 26, 9
+    LTEXT           "Glow intensity", IDC_STATIC, 120, 144, 120, 9
+    LTEXT           "Subtle", IDC_STATIC, 8, 154, 26, 9
     CONTROL         "", IDC_GLOW, "msctls_trackbar32", TBS_HORZ | WS_TABSTOP, 32, 154, 208, 18
-    RTEXT           "Intense", IDC_STATIC, 244, 157, 28, 9
+    RTEXT           "Intense", IDC_STATIC, 240, 154, 28, 9
 
-    LTEXT           "Camera speed", IDC_STATIC, 4, 172, 120, 9
-    LTEXT           "Still", IDC_STATIC, 4, 185, 26, 9
+    LTEXT           "3D Camera speed", IDC_STATIC, 120, 172, 120, 9
+    LTEXT           "Still", IDC_STATIC, 8, 182, 26, 9
     CONTROL         "", IDC_CAMSPEED, "msctls_trackbar32", TBS_HORZ | WS_TABSTOP, 32, 182, 208, 18
-    RTEXT           "Fast", IDC_STATIC, 244, 185, 24, 9
+    RTEXT           "Fast", IDC_STATIC, 240, 182, 24, 9
 
-    LTEXT           "Glyph mutation", IDC_STATIC, 4, 200, 120, 9
-    LTEXT           "Stable", IDC_STATIC, 4, 213, 26, 9
+    LTEXT           "Mutation rate", IDC_STATIC, 120, 200, 120, 9
+    LTEXT           "Stable", IDC_STATIC, 8, 210, 26, 9
     CONTROL         "", IDC_MUTATION, "msctls_trackbar32", TBS_HORZ | WS_TABSTOP, 32, 210, 208, 18
-    RTEXT           "Chaotic", IDC_STATIC, 244, 213, 30, 9
+    RTEXT           "Chaotic", IDC_STATIC, 240, 210, 30, 9
 END
 
 // Page 2 of the config dialog's tab control: on/off toggles, the easter-egg
 // (glitch) switch, and the project link.
-IDD_PAGE_OPTIONS DIALOGEX 0, 0, 272, 100
+IDD_PAGE_OPTIONS DIALOGEX 0, 0, 272, 252
 STYLE DS_SETFONT | DS_CONTROL | WS_CHILD
 FONT 9, "Segoe UI", 400, 0, 1
 BEGIN
@@ -75,15 +77,34 @@ BEGIN
     AUTOCHECKBOX    "Show frame rate", IDC_SHOWFPS,  4, 24, 130, 10
     AUTOCHECKBOX    "Bloom glow",      IDC_BLOOM,    149, 24, 130, 10
     AUTOCHECKBOX    "HDR highlights",  IDC_HDR,      4, 40, 130, 10
-    AUTOCHECKBOX    "Easter eggs (glitches)", IDC_EASTEREGGS, 149, 40, 140, 10
+    AUTOCHECKBOX    "Easter eggs", IDC_EASTEREGGS, 149, 40, 130, 10
+	AUTOCHECKBOX    "CRT filter (scanlines + shadow mask)", IDC_CRT_EMULATION, 149, 56, 130, 10
+    AUTOCHECKBOX    "60 FPS Cap", IDC_BATTERYSAVER, 4, 56, 130, 10
+    LTEXT           "Color Theme", IDC_STATIC, 4, 74, 120, 9
+    LTEXT           "Preset:", IDC_STATIC, 4, 89, 30, 8
+    COMBOBOX        IDC_PRESET_COMBO, 36, 86, 112, 90, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "Main Color...",   IDC_COLOR_MAIN, 152, 86, 58, 14
+    PUSHBUTTON      "Glitch Color...", IDC_COLOR_GLITCH, 212, 86, 58, 14
+    LTEXT           "Profiles (save up to 5 configurations)", IDC_STATIC, 4, 108, 220, 8
+    COMBOBOX        IDC_PROFILE_COMBO, 4, 119, 80, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    EDITTEXT        IDC_PROFILE_NAME, 88, 119, 92, 14, ES_AUTOHSCROLL | WS_BORDER | WS_TABSTOP
+    PUSHBUTTON      "Save",   IDC_PROFILE_SAVE, 184, 118, 28, 14
+    PUSHBUTTON      "Load",   IDC_PROFILE_LOAD, 214, 118, 28, 14
+    PUSHBUTTON      "Delete", IDC_PROFILE_DELETE, 244, 118, 24, 14
+    LTEXT           "Glyph Rendering", IDC_STATIC, 4, 140, 120, 9
+    AUTOCHECKBOX    "Flip Glyphs Horizontally", IDC_FLIPX, 4, 154, 140, 10
+    AUTOCHECKBOX    "Flip Glyphs Vertically",   IDC_FLIPY, 149, 154, 140, 10
+    AUTOCHECKBOX    "Binary Mode (0/1 only)",   IDC_BINARYMODE, 4, 170, 140, 10
+    AUTOCHECKBOX    "Column Gaps",              IDC_COLUMN_GAPS, 149, 170, 140, 10
+    AUTOCHECKBOX    "Extra-contrast heads",     IDC_EXTRA_CONTRAST_HEADS, 4, 186, 140, 10 
 
-    CONTROL         "<a href=""https://github.com/Pottypotsworth/ModernMatrixScreensaver"">Project on GitHub</a>",
-                    IDC_LINK, "SysLink", WS_TABSTOP, 4, 68, 200, 10
+    CONTROL         "<a href=""https://github.com/Delmay441/ModernMatrixScreensaver-with-Rezmason-font"">Project on GitHub</a>",
+                    IDC_LINK, "SysLink", WS_TABSTOP, 4, 236, 200, 10
 END
 
-IDD_CONFIG DIALOGEX 0, 0, 300, 412
+IDD_CONFIG DIALOGEX 0, 0, 300, 432
 STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Modern Matrix - Settings"
+CAPTION "Matrix Reflow - Settings"
 FONT 9, "Segoe UI", 400, 0, 1
 BEGIN
     // Live preview surface (a child render window is created over this placeholder).
@@ -92,11 +113,11 @@ BEGIN
     // Tab control directly below the preview; its two pages (IDD_PAGE_SLIDERS /
     // IDD_PAGE_OPTIONS) are created and positioned into its display area at
     // runtime by config.cpp -- see PositionPages()/ShowPage().
-    CONTROL         "", IDC_TAB, "SysTabControl32", WS_TABSTOP, 10, 130, 280, 250
+    CONTROL         "", IDC_TAB, "SysTabControl32", WS_TABSTOP, 10, 130, 280, 270
 
-    PUSHBUTTON      "Reset to Defaults", IDC_RESET, 10, 390, 90, 14
-    PUSHBUTTON      "Cancel", IDCANCEL, 196, 390, 44, 14
-    DEFPUSHBUTTON   "Save", IDOK, 246, 390, 44, 14
+    PUSHBUTTON      "Reset to Defaults", IDC_RESET, 10, 410, 90, 14
+    PUSHBUTTON      "Cancel", IDCANCEL, 196, 410, 44, 14
+    DEFPUSHBUTTON   "Save", IDOK, 246, 410, 44, 14
 END
 
 VS_VERSION_INFO VERSIONINFO
@@ -110,11 +131,11 @@ BEGIN
         BLOCK "040904B0"
         BEGIN
             VALUE "CompanyName",      "Chewie"
-            VALUE "FileDescription",  "Modern Matrix"
+            VALUE "FileDescription",  "Matrix Reflow"
             VALUE "FileVersion",      "1.0.0.0"
-            VALUE "InternalName",     "ModernMatrix"
-            VALUE "OriginalFilename", "ModernMatrix.scr"
-            VALUE "ProductName",      "Modern Matrix"
+            VALUE "InternalName",     "MatrixReflow"
+            VALUE "OriginalFilename", "MatrixReflow.scr"
+            VALUE "ProductName",      "Matrix Reflow"
             VALUE "ProductVersion",   "1.0.0.0"
         END
     END

@@ -20,7 +20,7 @@
 // stray ModernMatrix.log files sitting in whatever folder the .scr happened
 // to be run from -- not somewhere a user expects an app to leave a file.
 //
-// This now writes to %LOCALAPPDATA%\ModernMatrix\ModernMatrix.log, which is
+// This now writes to %LOCALAPPDATA%\MatrixReflow\MatrixReflow.log, which is
 // always writable by the current user regardless of where the .scr itself
 // lives or how it was launched, and is the conventional place for an app's
 // own logs/state on Windows. Falls back to %TEMP% only if LocalAppData is
@@ -30,8 +30,8 @@
 // session-start marker per run, and rotates to a single ".old" backup once
 // it grows past ~1MB so a screensaver left running for months doesn't grow
 // an unbounded file.
-static const wchar_t kLogDirName[]  = L"ModernMatrix";
-static const wchar_t kLogFileName[] = L"ModernMatrix.log";
+static const wchar_t kLogDirName[]  = L"MatrixReflow";
+static const wchar_t kLogFileName[] = L"MatrixReflow.log";
 static const long long kMaxLogBytes = 1 * 1024 * 1024; // rotate past ~1MB
 
 static bool ResolveLogPath(wchar_t* out, size_t cap)

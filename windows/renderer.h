@@ -9,6 +9,7 @@
 #include <dwrite.h>
 #include <wrl/client.h>
 #include <cstdint>
+#include <vector>
 #include "mmcore.h"
 #include "atlas.h"
 #include <DirectXMath.h>
@@ -20,7 +21,7 @@ struct Uniforms {
     float camUX, camUY, camUZ;
     float glyphHalf, atlasCols, atlasRows, time;
     float fogEnabled, fogStartDist, fogEndDist;
-    float textured, wireframe, pad0, pad1;
+    float textured, wireframe, extraContrastHeads, pad1;
 };
 static_assert(sizeof(Uniforms) == 144, "Uniforms size mismatch");
 
@@ -36,13 +37,6 @@ public:
     bool RenderFrame(float dt);
     bool SaveScreenshot(const wchar_t* path);
     double Fps() const { return fps_; }
-
-    // Drains this renderer's MMSim bottom-hit queue (see mmcore.h) so callers
-    // (host.cpp) can forward the events to MMAudio::NotifyBottomEvents once
-    // per fixed sim tick. Safe to call even if sim_ is null or empty.
-    int PopBottomEvents(MMBottomEvent* out, int cap) {
-        return sim_ ? mm_sim_pop_bottom_events(sim_, out, cap) : 0;
-    }
 
     HANDLE FrameWaitableHandle() const { return frameWaitable_; }
 
@@ -78,8 +72,17 @@ private:
     ComPtr<ID3D11Texture2D> sceneTex_;
     ComPtr<ID3D11RenderTargetView> sceneRTV_;
     ComPtr<ID3D11ShaderResourceView> sceneSRV_;
+
+    // Full-res intermediate target holding bloom_composite's output when CRT
+    // emulation is on, since the swapchain backbuffer (backRTV_'s usual
+    // target) isn't created with D3D11_BIND_SHADER_RESOURCE and so can't be
+    // read back from in the same frame the way crt_filter needs to. Unused
+    // (and not allocated) when crtEmulation is off -- composite writes
+    // straight to backRTV_ as before in that case.
+    ComPtr<ID3D11Texture2D> crtInputTex_;
+    ComPtr<ID3D11RenderTargetView> crtInputRTV_;
+    ComPtr<ID3D11ShaderResourceView> crtInputSRV_;
     
-    // Dual-filtering bloom mipchain
     static const int kBloomMips = 5;
     ComPtr<ID3D11Texture2D> bloomMipTex_[kBloomMips];
     ComPtr<ID3D11RenderTargetView> bloomMipRTV_[kBloomMips];
@@ -94,6 +97,7 @@ private:
     ComPtr<ID3D11PixelShader>  downsamplePS_;
     ComPtr<ID3D11PixelShader>  upsamplePS_;
     ComPtr<ID3D11PixelShader>  compositePS_;
+    ComPtr<ID3D11PixelShader>  crtFilterPS_;
 
     ComPtr<ID3D11Buffer> instanceBuf_;
     ComPtr<ID3D11ShaderResourceView> instanceSRV_;
@@ -118,7 +122,10 @@ private:
     MMSim* sim_ = nullptr;
     MMSettings settings_{};
 
+    std::vector<MMGlyphInstance> sortBuf_;
+
     int bufferCapacity_ = 0; 
+	UINT presentInterval_ = 1;   // swapchain sync interval; >1 caps fps below the panel's refresh rate
     int instanceCount_ = 0;
     float time_ = 0.f, panTime_ = 0.f;
     float forwardTravel_ = 0.f;
@@ -132,4 +139,5 @@ private:
     DirectX::XMFLOAT3 cachedCamUp_;
 
     bool ready_ = false;
+    bool isOccluded_ = false;
 };
